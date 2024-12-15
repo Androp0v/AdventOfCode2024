@@ -120,7 +120,7 @@ struct Day13: AdventDay {
     // Replace this with your solution for the second part of the day's challenge.
     func part2() -> Any {
         var totalTokens: Int = 0
-        for (index, machine) in machines.enumerated() {
+        for (_, machine) in machines.enumerated() {
             // print(("Machine \(index) of \(machines.count)"))
             if let (x, y) = calculateXY(
                 deltaA: machine.buttonA,
