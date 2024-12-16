@@ -8,33 +8,10 @@ struct Day16: AdventDay {
         case end = "E"
     }
     
-    struct GridPosition: Equatable, Hashable {
-        let i: Int
-        let j: Int
-        
-        func left() -> GridPosition {
-            return GridPosition(i: i - 1, j: j)
-        }
-        func right() -> GridPosition {
-            return GridPosition(i: i + 1, j: j)
-        }
-        func up() -> GridPosition {
-            return GridPosition(i: i, j: j - 1)
-        }
-        func down() -> GridPosition {
-            return GridPosition(i: i, j: j + 1)
-        }
-    }
-    
-    enum Direction: CaseIterable {
-        case left
-        case right
-        case up
-        case down
-    }
-    
     let grid: [[TileType]]
     let startPosition: GridPosition
+    
+    // MARK: - Init
     
     init(data: String) {
         var grid = [[TileType]]()
@@ -62,30 +39,186 @@ struct Day16: AdventDay {
         self.startPosition = start!
     }
     
-    func rotateClockwise(_ direction: Direction) -> Direction {
+    // MARK: - Functions
+    
+    enum RotationDirection {
+        case clockwise
+        case counterclockwise
+    }
+    
+    func rotate(_ direction: Direction, _ rotationDirection: RotationDirection) -> Direction {
         switch direction {
         case .left:
-            return .up
+            return rotationDirection == .clockwise ? .up : .down
         case .right:
-            return .down
+            return rotationDirection == .clockwise ? .down : .up
         case .up:
-            return .right
+            return rotationDirection == .clockwise ? .right : .left
         case .down:
-            return .left
+            return rotationDirection == .clockwise ? .left : .right
         }
     }
     
-    func rotateCounterclockwise(_ direction: Direction) -> Direction {
-        switch direction {
-        case .left:
-            return .down
-        case .right:
-            return .up
-        case .up:
-            return .left
-        case .down:
-            return .right
+    struct Step {
+        let score: Int
+        let nextPosition: GridPosition
+        let direction: Direction
+        let previousPositions: Set<GridPosition>
+    }
+    
+    /// Returns all the possible steps that can be taken after performing the given step.
+    ///
+    /// After each step, there's 3 options for the next step:
+    /// - Go straight.
+    /// - Rotate clockwise and go straight.
+    /// - Rotate counterclockwise and go straight.
+    func nextSteps(after step: Step) -> [Step] {
+        var nextSteps = [Step]()
+        for (index, direction) in [
+            step.direction,
+            rotate(step.direction, .clockwise),
+            rotate(step.direction, .counterclockwise)
+        ].enumerated() {
+            let rotationCost = (index == 0) ? 0 : 1000
+            let next = nextPosition(step.nextPosition, direction: direction)
+            switch grid[next.j][next.i] {
+            case .empty, .end:
+                var updatedPreviousPositions = step.previousPositions
+                updatedPreviousPositions.insert(next)
+                nextSteps.append(
+                    Step(
+                        score: step.score + 1 + rotationCost,
+                        nextPosition: next,
+                        direction: direction,
+                        previousPositions: updatedPreviousPositions
+                    )
+                )
+            case .wall:
+                break
+            }
         }
+        return nextSteps
+    }
+    
+    /// All the possible steps that can be taken from the initial tile.
+    func possibleInitialSteps() -> [Int: [Step]] {
+        var possibleSteps = [Int: [Step]]()
+        for direction in Direction.allCases {
+            let nextPosition = nextPosition(startPosition, direction: direction)
+            guard grid[nextPosition.j][nextPosition.i] != .wall else { continue }
+            let score = direction == .right ? 1 : 1001
+            let step = Step(
+                score: score,
+                nextPosition: nextPosition,
+                direction: direction,
+                previousPositions: Set<GridPosition>([startPosition, nextPosition])
+            )
+            possibleSteps[score, default: [Step]()].append(step)
+        }
+        return possibleSteps
+    }
+    
+    struct Visit: Hashable {
+        let position: GridPosition
+        let direction: Direction
+    }
+
+    // MARK: - Part 1
+
+    func part1() async -> Any {
+        var possibleSteps = possibleInitialSteps()
+        var visitedWithScore = [Visit: Int]()
+
+        while true {
+            let minScore = possibleSteps.keys.min()!
+            let lowestScoreSteps = possibleSteps[minScore]!
+            possibleSteps[minScore] = nil
+            for step in lowestScoreSteps {
+                if grid[step.nextPosition.j][step.nextPosition.i] == .end {
+                    return step.score
+                }
+                let nextSteps = nextSteps(after: step)
+                for nextStep in nextSteps {
+                    let visit = Visit(position: nextStep.nextPosition, direction: nextStep.direction)
+                    if let visitedScore = visitedWithScore[visit] {
+                        if visitedScore < nextStep.score { continue }
+                    }
+                    possibleSteps[nextStep.score, default: []].append(nextStep)
+                    visitedWithScore[visit] = nextStep.score
+                }
+            }
+        }
+    }
+
+    // MARK: - Part 2
+    
+    func part2() -> Any {
+        var possibleSteps: [Int: [Step]] = possibleInitialSteps()
+        var visitedWithScore = [Visit: Int]()
+        
+        var finalSteps = [Step]()
+        while true {
+            let minScore = possibleSteps.keys.min()!
+            let lowestScoreSteps = possibleSteps[minScore]!
+            possibleSteps[minScore] = nil
+            var shouldEnd = false
+            for step in lowestScoreSteps {
+                if grid[step.nextPosition.j][step.nextPosition.i] == .end {
+                    shouldEnd = true
+                    finalSteps.append(step)
+                }
+                let nextSteps = nextSteps(after: step)
+                for nextStep in nextSteps {
+                    let visit = Visit(position: nextStep.nextPosition, direction: nextStep.direction)
+                    if let visitedScore = visitedWithScore[visit] {
+                        if visitedScore < nextStep.score { continue }
+                    }
+                    possibleSteps[nextStep.score, default: []].append(nextStep)
+                    visitedWithScore[visit] = nextStep.score
+                }
+            }
+            if shouldEnd {
+                break
+            }
+        }
+        
+        var tilesVisitedByFinalPaths = Set<GridPosition>()
+        for step in finalSteps {
+            for visitedTile in step.previousPositions {
+                tilesVisitedByFinalPaths.insert(visitedTile)
+            }
+            tilesVisitedByFinalPaths.insert(step.nextPosition)
+        }
+        return tilesVisitedByFinalPaths.count
+    }
+}
+
+// MARK: - Utility Types
+
+extension Day16 {
+    struct GridPosition: Equatable, Hashable {
+        let i: Int
+        let j: Int
+        
+        func left() -> GridPosition {
+            return GridPosition(i: i - 1, j: j)
+        }
+        func right() -> GridPosition {
+            return GridPosition(i: i + 1, j: j)
+        }
+        func up() -> GridPosition {
+            return GridPosition(i: i, j: j - 1)
+        }
+        func down() -> GridPosition {
+            return GridPosition(i: i, j: j + 1)
+        }
+    }
+    
+    enum Direction: CaseIterable {
+        case left
+        case right
+        case up
+        case down
     }
     
     func nextPosition(_ position: GridPosition, direction: Direction) -> GridPosition {
@@ -99,115 +232,5 @@ struct Day16: AdventDay {
         case .down:
             return position.down()
         }
-    }
-    
-    struct Step {
-        let score: Int
-        let nextPosition: GridPosition
-        let direction: Direction
-    }
-        
-    func findMinScore(startingAt: GridPosition, facing direction: Direction, currentScore: Int, visited: [GridPosition]) -> Int? {
-        var scores = [Int]()
-        for (index, direction) in [
-            direction,
-            rotateClockwise(direction),
-            rotateCounterclockwise(direction)
-        ].enumerated() {
-            let rotationCost = (index == 0) ? 0 : 1000
-            let next = nextPosition(startingAt, direction: direction)
-            if !visited.contains(next) {
-                switch grid[next.j][next.i] {
-                case .empty:
-                    var newVisited = visited
-                    newVisited.append(next)
-                    if let score = findMinScore(
-                        startingAt: next,
-                        facing: direction,
-                        currentScore: currentScore + 1 + rotationCost,
-                        visited: newVisited
-                    ) {
-                        scores.append(score)
-                    }
-                case .wall:
-                    break
-                case .end:
-                    scores.append(currentScore + 1)
-                }
-            }
-        }
-        return scores.min()
-    }
-    
-    func nextSteps(startingAt: GridPosition, facing direction: Direction, currentScore: Int) -> [Step] {
-        var nextSteps = [Step]()
-        for (index, direction) in [
-            direction,
-            rotateClockwise(direction),
-            rotateCounterclockwise(direction)
-        ].enumerated() {
-            let rotationCost = (index == 0) ? 0 : 1000
-            let next = nextPosition(startingAt, direction: direction)
-            switch grid[next.j][next.i] {
-            case .empty, .end:
-                nextSteps.append(
-                    Step(
-                        score: currentScore + 1 + rotationCost,
-                        nextPosition: next,
-                        direction: direction
-                    )
-                )
-            case .wall:
-                break
-            }
-        }
-        return nextSteps
-    }
-    
-    struct Visit: Hashable {
-        let position: GridPosition
-        let direction: Direction
-    }
-
-    // Replace this with your solution for the first part of the day's challenge.
-    func part1() async -> Any {
-        var possibleSteps = [Int: [Step]]()
-        var visitedWithScore = [Visit: Int]()
-        for direction in Direction.allCases {
-            let nextPosition = nextPosition(startPosition, direction: direction)
-            guard grid[nextPosition.j][nextPosition.i] != .wall else { continue }
-            let score = direction == .right ? 1 : 1001
-            let step = Step(score: score, nextPosition: nextPosition, direction: direction)
-            possibleSteps[score, default: [Step]()].append(step)
-        }
-        while true {
-            let minScore = possibleSteps.keys.min()!
-            let lowestScoreSteps = possibleSteps[minScore]!
-            possibleSteps[minScore] = nil
-            // print("Current score: \(minScore)")
-            for step in lowestScoreSteps {
-                if grid[step.nextPosition.j][step.nextPosition.i] == .end {
-                    return step.score
-                }
-                let nextSteps = nextSteps(
-                    startingAt: step.nextPosition,
-                    facing: step.direction,
-                    currentScore: step.score
-                )
-                for nextStep in nextSteps {
-                    let visit = Visit(position: nextStep.nextPosition, direction: nextStep.direction)
-                    if let visitedScore = visitedWithScore[visit] {
-                        if visitedScore < nextStep.score { continue }
-                    }
-                    possibleSteps[nextStep.score, default: []].append(nextStep)
-                    visitedWithScore[visit] = nextStep.score
-                }
-            }
-        }
-    }
-
-    // Replace this with your solution for the second part of the day's challenge.
-    func part2() -> Any {
-        return 0
     }
 }
