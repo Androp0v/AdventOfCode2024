@@ -61,7 +61,7 @@ struct Day17: AdventDay {
         }
     }
     
-    final class Machine {
+    final class Machine: @unchecked Sendable {
         struct Registers {
             var instructionPointer: Int = 0
             var A: Int
@@ -94,10 +94,8 @@ struct Day17: AdventDay {
         }
         
         func debug(_ message: String, terminator: String = "\n") {
-            /*
             guard debugMode else { return }
-            print(message)
-             */
+            print(message, terminator: terminator)
         }
         
         init(register: Registers) {
@@ -199,66 +197,6 @@ struct Day17: AdventDay {
                 }
             }
         }
-        
-        /*
-        func fusedIteration() {
-            let rA = register.A
-            let power = pow(2, rA^3)
-            outputBuffer.append(((rA^3)^(rA/power))^5)
-            register.A = rA^3
-        }
-         */
-        
-        func startAndCompare(
-            instructionStream: [InstructionCombo],
-            compareWith rawStream: [Int]
-        ) -> Bool {
-            
-            var temptRawStream = rawStream
-            while register.instructionPointer < (2 * instructionStream.count) {
-                let ip = register.instructionPointer
-                guard ip % 2 == 0 else { fatalError() }
-                let combo = instructionStream[ip / 2]
-                let instruction = combo.instruction
-                let operand = combo.operand
-                switch instruction {
-                case .adv:
-                    adv(operand: operand)
-                case .bxl:
-                    bxl(operand: operand)
-                case .bst:
-                    bst(operand: operand)
-                case .jnz:
-                    jnz(operand: operand)
-                case .bxc:
-                    bxc(operand: operand)
-                case .out:
-                    out(operand: operand)
-                    guard !temptRawStream.isEmpty else {
-                        return false
-                    }
-                    guard outputBuffer.last! == temptRawStream.remove(at: 0) else {
-                        return false
-                    }
-                case .bdv:
-                    bdv(operand: operand)
-                case .cdv:
-                    cdv(operand: operand)
-                }
-            }
-            /*
-            while register.A != 0 {
-                fusedIteration()
-                guard !temptRawStream.isEmpty else {
-                    return false
-                }
-                guard outputBuffer.last! == temptRawStream.remove(at: 0) else {
-                    return false
-                }
-            }
-             */
-            return outputBuffer == rawStream
-        }
     }
     
     struct InstructionCombo {
@@ -312,63 +250,55 @@ struct Day17: AdventDay {
         machine.start(instructionStream: instructionStream)
         return String(machine.outputBuffer.map( { String($0) } ).joined(by: ","))
     }
+    
+    func binary(_ number: Int) -> String {
+        return String(number, radix: 2)
+    }
+    
+    func printCurrentNumber(_ number: Int) {
+        print(" current number: \(number) (base 10)")
+        print(" current number: \(String(number, radix: 2)) (base 2)")
+    }
+    
+    func printBinary(_ number: Int) {
+        print(String(number, radix: 2))
+    }
+    
+    func outputForMachineWith(instructionStream: [InstructionCombo], registerA: Int) -> [Int] {
+        let machine = Machine(register: initialState)
+        machine.register.A = registerA
+        machine.start(instructionStream: instructionStream)
+        return machine.outputBuffer
+    }
+    
+    func findRegisterA() -> Int? {
+        var result: Int?
+        func innerFind(registerA: Int, depth: Int, result: inout Int?) {
+            let machine = Machine(register: initialState)
+            machine.register.A = registerA
+            machine.start(instructionStream: instructionStream)
+            if machine.outputBuffer == rawInstructionStream {
+                guard result == nil else { return }
+                result = registerA
+            } else if machine.outputBuffer == rawInstructionStream.suffix(depth) || depth == 0 {
+                for offset in 0..<8 {
+                    innerFind(
+                        registerA: 8 * registerA + offset,
+                        depth: depth + 1,
+                        result: &result
+                    )
+                }
+            }
+        }
+        innerFind(registerA: 0, depth: 0, result: &result)
+        return result
+    }
 
     // MARK: - Part 2
     // Replace this with your solution for the second part of the day's challenge.
     func part2() async -> Any {
-        return await withCheckedContinuation { continuation in
-            let startNumber = 4_758_000_000 // 4_758_000_000 // 208000000
-            let blockSize = 10_000_000
-            
-            let bigBlockSize = blockSize * 10
-            
-            var bigBlockIndex: Int = 0
-            let result = OSAllocatedUnfairLock<Int?>(initialState: nil)
-            while true {
-                let bigBlockStart = startNumber + bigBlockIndex * bigBlockSize
-                print("Testing \(bigBlockStart) to \(bigBlockStart + 10 * blockSize)")
-                DispatchQueue.concurrentPerform(iterations: 10) { iteration in
-                    let startBlock = bigBlockStart + (iteration * blockSize)
-                    let endBlock = bigBlockStart + (iteration + 1) * blockSize
-                    // print("    Testing \(startBlock) to \(endBlock)")
-                    for registerA in startBlock..<endBlock {
-                        let machine = Machine(register: initialState)
-                        machine.register.A = registerA
-                        guard machine.startAndCompare(
-                            instructionStream: instructionStream,
-                            compareWith: rawInstructionStream
-                        ) else {
-                            continue
-                        }
-                        result.withLock { state in
-                            if state != nil {
-                                if registerA < state! {
-                                    state = registerA
-                                }
-                            } else {
-                                state = registerA
-                            }
-                        }
-                        break
-                    }
-                    // print("    Completed \(startBlock) to \(endBlock)")
-                }
-                let resultValue = result.withLock { value in
-                    return value
-                }
-                if let resultValue {
-                    continuation.resume(returning: resultValue)
-                    break
-                }
-                bigBlockIndex += 1
-                print("Completed \(bigBlockStart) to \(bigBlockStart + 10 * blockSize)")
-            }
-        }
+        return findRegisterA()!
     }
-}
-
-enum ComparisonError: Error {
-    case mismatchedOutput
 }
 
 // MARK: - Utils
