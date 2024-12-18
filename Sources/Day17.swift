@@ -250,27 +250,7 @@ struct Day17: AdventDay {
         machine.start(instructionStream: instructionStream)
         return String(machine.outputBuffer.map( { String($0) } ).joined(by: ","))
     }
-    
-    func binary(_ number: Int) -> String {
-        return String(number, radix: 2)
-    }
-    
-    func printCurrentNumber(_ number: Int) {
-        print(" current number: \(number) (base 10)")
-        print(" current number: \(String(number, radix: 2)) (base 2)")
-    }
-    
-    func printBinary(_ number: Int) {
-        print(String(number, radix: 2))
-    }
-    
-    func outputForMachineWith(instructionStream: [InstructionCombo], registerA: Int) -> [Int] {
-        let machine = Machine(register: initialState)
-        machine.register.A = registerA
-        machine.start(instructionStream: instructionStream)
-        return machine.outputBuffer
-    }
-    
+        
     func findRegisterA() -> Int? {
         var result: Int?
         func innerFind(registerA: Int, depth: Int, result: inout Int?) {
