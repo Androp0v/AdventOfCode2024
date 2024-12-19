@@ -347,3 +347,5 @@ extension Day17.InstructionCombo: CustomStringConvertible {
 fileprivate func pow2(_ power: Int) -> Int {
     return 1<<power
 }
+
+
